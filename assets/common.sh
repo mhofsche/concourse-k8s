@@ -248,7 +248,7 @@ initialize() {
     die "Invalid payload (missing cluster_url)"
   fi
   if [[ "$cluster_url" =~ https.* ]]; then
-
+    insecure_cluster=$(jq -r '.source.insecure_cluster // "false"' < $payload)
     cluster_ca=$(jq -r '.source.cluster_ca // ""' < $payload)
     admin_key=$(jq -r '.source.admin_key // ""' < $payload)
     admin_cert=$(jq -r '.source.admin_cert // ""' < $payload)
@@ -263,9 +263,13 @@ initialize() {
 
     mkdir -p /root/.kube
 
-    ca_path="/root/.kube/ca.pem"
-    echo "$cluster_ca" | base64 -d > $ca_path
-    kubectl config set-cluster default --server=$cluster_url --certificate-authority=$ca_path
+    if [ "$insecure_cluster" == "true" ]; then
+      kubectl config set-cluster default --server=$cluster_url --insecure-skip-tls-verify=true
+    else
+      ca_path="/root/.kube/ca.pem"
+      (echo "$cluster_ca" | base64 -d || echo "$cluster_ca") > $ca_path
+      kubectl config set-cluster default --server=$cluster_url --certificate-authority=$ca_path
+    fi
 
     if [ ! -z "$admin_token" ]; then
       kubectl config set-credentials $admin_user --token=$admin_token
